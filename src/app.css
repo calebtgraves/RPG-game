@@ -1,0 +1,83 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.world-grid {
+  display: inline-block;
+  border: 1px solid #333;
+  line-height: 0;
+  font-size: 0;
+}
+
+.world-row {
+  display: flex;
+}
+
+.world-tile {
+  width: 17px;
+  height: 17px;
+  margin-right: -1px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  position: relative;
+}
+
+.world-tile:hover {
+  outline: 2px solid white;
+  z-index: 1;
+}
+
+.world-tile::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  margin-bottom: 4px;
+}
+
+.world-tile:hover::after {
+  opacity: 1;
+}
+
+.world-tile.fog {
+  background-color: #1a1a2e !important;
+}
+
+.world-tile.fog-seen {
+  filter: brightness(0.5);
+}
+
+.world-tile.adjacent {
+  cursor: pointer;
+}
+
+.world-tile.adjacent:hover {
+  outline: 2px solid #ffcc00;
+}
+
+.world-tile.player::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background-color: #ff4444;
+  border-radius: 50%;
+  border: 2px solid white;
+  z-index: 2;
+}
