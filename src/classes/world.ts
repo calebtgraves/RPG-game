@@ -18,20 +18,22 @@ export default class World {
         biomes,
         hasOcean = false,
         lakeCount = 0,
+        mainlandSize,
     }: {
         width: number
         height: number
         biomes: BiomeEntry[]
         hasOcean?: boolean
         lakeCount?: number
+        mainlandSize?: number // Size of the central mainland (defaults to map size if no ocean)
     }) {
         this.width = width
         this.height = height
         this.availableBiomes = biomes
-        this.tiles = this.generate({ hasOcean, lakeCount })
+        this.tiles = this.generate({ hasOcean, lakeCount, mainlandSize })
     }
 
-    private generate({ hasOcean, lakeCount }: { hasOcean: boolean; lakeCount: number }): Tile[][] {
+    private generate({ hasOcean, lakeCount, mainlandSize }: { hasOcean: boolean; lakeCount: number; mainlandSize?: number }): Tile[][] {
         // Initialize empty grid
         const grid: (Tile | null)[][] = Array.from({ length: this.height }, () =>
             Array.from({ length: this.width }, () => null)
@@ -39,7 +41,7 @@ export default class World {
 
         // Step 1: Generate ocean around edges if enabled
         if (hasOcean) {
-            this.generateOcean(grid)
+            this.generateOcean(grid, mainlandSize)
         }
 
         // Step 2: Generate small lakes (1-4 tiles each)
@@ -212,104 +214,98 @@ export default class World {
         }
     }
 
-    private generateOcean(grid: (Tile | null)[][]): void {
-        // Create a noise-like map for ocean depth variation
-        const oceanDepthMap: number[][] = Array.from({ length: this.height }, () =>
+    private generateOcean(grid: (Tile | null)[][], mainlandSize?: number): void {
+        // Mainland size defaults to slightly smaller than map
+        const landSize = mainlandSize ?? Math.min(this.width, this.height) - 5
+        const centerX = this.width / 2
+        const centerY = this.height / 2
+        const halfLand = landSize / 2
+
+        // Create a noise map for organic mainland edges
+        const noiseMap: number[][] = Array.from({ length: this.height }, () =>
             Array.from({ length: this.width }, () => 0)
         )
 
-        // Base ocean depth varies by position using simple noise
+        // Generate noise for organic edges
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
-                // Base depth with random variation (1-4 tiles from edge)
-                const baseDepth = 1 + Math.random() * 3
-                // Add sine wave variation for more organic shapes
-                const waveX = Math.sin(x * 0.5) * 1.5
-                const waveY = Math.sin(y * 0.4) * 1.5
-                oceanDepthMap[y][x] = baseDepth + waveX + waveY + (Math.random() - 0.5) * 2
+                // Base noise with sine waves for organic shapes
+                const waveX = Math.sin(x * 0.3) * 2 + Math.sin(x * 0.7) * 1.5
+                const waveY = Math.sin(y * 0.25) * 2 + Math.sin(y * 0.6) * 1.5
+                noiseMap[y][x] = waveX + waveY + (Math.random() - 0.5) * 3
             }
         }
 
-        // Generate bays/inlets that cut into the land
-        const bayCount = 2 + Math.floor(Math.random() * 4)
+        // Generate bays that cut into the mainland
+        const bayCount = 2 + Math.floor(Math.random() * 3)
         for (let i = 0; i < bayCount; i++) {
-            this.generateBay(oceanDepthMap)
+            this.generateMainlandBay(noiseMap, centerX, centerY, halfLand)
         }
 
-        // Apply the ocean based on depth map
+        // Place water outside the mainland zone
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
-                const distFromEdge = Math.min(x, y, this.width - 1 - x, this.height - 1 - y)
-                if (distFromEdge < oceanDepthMap[y][x]) {
+                // Distance from center (using max for square-ish shape)
+                const distX = Math.abs(x - centerX)
+                const distY = Math.abs(y - centerY)
+
+                // Use a blend of square and circular distance for natural shape
+                const squareDist = Math.max(distX, distY)
+                const circularDist = Math.sqrt(distX * distX + distY * distY)
+                const dist = squareDist * 0.6 + circularDist * 0.4
+
+                // Add noise for organic edges
+                const noisyDist = dist - noiseMap[y][x]
+
+                if (noisyDist > halfLand) {
                     grid[y][x] = { biome: new Water(), x, y }
                 }
             }
         }
 
-        // Generate small islands in large water areas
+        // Generate small islands in the ocean
         this.generateIslands(grid)
     }
 
-    private generateBay(depthMap: number[][]): void {
-        // Pick a random edge to start the bay
-        const edge = Math.floor(Math.random() * 4) // 0=top, 1=right, 2=bottom, 3=left
-        let startX: number, startY: number, dirX: number, dirY: number
+    private generateMainlandBay(noiseMap: number[][], centerX: number, centerY: number, halfLand: number): void {
+        // Pick a random edge of the mainland to start the bay
+        const angle = Math.random() * Math.PI * 2
+        const startX = centerX + Math.cos(angle) * halfLand
+        const startY = centerY + Math.sin(angle) * halfLand
 
-        switch (edge) {
-            case 0: // top
-                startX = 3 + Math.floor(Math.random() * (this.width - 6))
-                startY = 0
-                dirX = (Math.random() - 0.5) * 0.5
-                dirY = 1
-                break
-            case 1: // right
-                startX = this.width - 1
-                startY = 3 + Math.floor(Math.random() * (this.height - 6))
-                dirX = -1
-                dirY = (Math.random() - 0.5) * 0.5
-                break
-            case 2: // bottom
-                startX = 3 + Math.floor(Math.random() * (this.width - 6))
-                startY = this.height - 1
-                dirX = (Math.random() - 0.5) * 0.5
-                dirY = -1
-                break
-            default: // left
-                startX = 0
-                startY = 3 + Math.floor(Math.random() * (this.height - 6))
-                dirX = 1
-                dirY = (Math.random() - 0.5) * 0.5
-                break
-        }
+        // Direction pointing inward toward center
+        const dirX = (centerX - startX) / halfLand
+        const dirY = (centerY - startY) / halfLand
 
-        // Extend the bay inland
-        const bayLength = 3 + Math.floor(Math.random() * 6)
-        const bayWidth = 1 + Math.floor(Math.random() * 2)
+        // Bay parameters
+        const bayLength = 4 + Math.floor(Math.random() * 8)
+        const bayWidth = 2 + Math.floor(Math.random() * 3)
+
         let x = startX
         let y = startY
 
         for (let i = 0; i < bayLength; i++) {
-            // Increase depth at this point and surrounding area
+            // Reduce the noise value (makes it more likely to be water)
             for (let dy = -bayWidth; dy <= bayWidth; dy++) {
                 for (let dx = -bayWidth; dx <= bayWidth; dx++) {
                     const nx = Math.round(x + dx)
                     const ny = Math.round(y + dy)
                     if (nx >= 0 && nx < this.width && ny >= 0 && ny < this.height) {
                         const dist = Math.sqrt(dx * dx + dy * dy)
-                        const depthBoost = Math.max(0, (bayLength - i) * 0.8 - dist)
-                        depthMap[ny][nx] = Math.max(depthMap[ny][nx], depthMap[ny][nx] + depthBoost)
+                        const reduction = Math.max(0, (bayLength - i) * 0.8 - dist)
+                        noiseMap[ny][nx] -= reduction
                     }
                 }
             }
 
-            // Move along the bay with some wobble
-            x += dirX + (Math.random() - 0.5) * 0.5
-            y += dirY + (Math.random() - 0.5) * 0.5
+            // Move inward with some wobble
+            x += dirX * 1.5 + (Math.random() - 0.5) * 0.8
+            y += dirY * 1.5 + (Math.random() - 0.5) * 0.8
         }
     }
 
     private generateIslands(grid: (Tile | null)[][]): void {
-        // Find large contiguous water areas and possibly add islands
+        // Find large contiguous water areas and add islands
         const visited: boolean[][] = Array.from({ length: this.height }, () =>
             Array.from({ length: this.width }, () => false)
         )
@@ -343,22 +339,36 @@ export default class World {
                     }
                 }
 
-                // If water area is large enough (>40 tiles), maybe add an island
-                if (waterTiles.length > 40 && Math.random() < 0.7) {
-                    this.placeIsland(grid, waterTiles)
+                // Generate a few islands in large water areas
+                // 2-4 islands total: 1-2 large, 1-2 small
+                if (waterTiles.length > 500) {
+                    const largeIslandCount = 1 + Math.floor(Math.random() * 2) // 1-2 large islands
+                    const tinyIslandCount = 1 + Math.floor(Math.random() * 2)  // 1-2 small islands
+
+                    for (let i = 0; i < largeIslandCount; i++) {
+                        this.placeIsland(grid, waterTiles, "large")
+                    }
+                    for (let i = 0; i < tinyIslandCount; i++) {
+                        this.placeIsland(grid, waterTiles, "tiny")
+                    }
                 }
             }
         }
     }
 
-    private placeIsland(grid: (Tile | null)[][], waterTiles: { x: number; y: number }[]): void {
-        // Find center-ish tiles (not at the edge of the water)
-        const margin = 2
-        const innerTiles = waterTiles.filter(t => {
-            const nearEdge = waterTiles.filter(w =>
+    private placeIsland(grid: (Tile | null)[][], waterTiles: { x: number; y: number }[], sizeType: "tiny" | "large" = "large"): void {
+        // Find tiles that are still water (not already used by another island)
+        const availableWater = waterTiles.filter(t => grid[t.y][t.x]?.biome instanceof Water)
+        const minRequired = sizeType === "large" ? 250 : 20
+        if (availableWater.length < minRequired) return
+
+        // Find inner tiles (not at the edge of the water area)
+        const margin = sizeType === "large" ? 8 : 3
+        const innerTiles = availableWater.filter(t => {
+            const nearbyWater = availableWater.filter(w =>
                 Math.abs(w.x - t.x) <= margin && Math.abs(w.y - t.y) <= margin
             ).length
-            return nearEdge >= (margin * 2 + 1) * (margin * 2 + 1) * 0.7
+            return nearbyWater >= (margin * 2 + 1) * (margin * 2 + 1) * 0.5
         })
 
         if (innerTiles.length < 4) return
@@ -366,8 +376,14 @@ export default class World {
         // Pick a random center point for the island
         const center = innerTiles[Math.floor(Math.random() * innerTiles.length)]
 
-        // Create island (8-20 tiles) - needs to be large enough for interior biomes after beach
-        const islandSize = 8 + Math.floor(Math.random() * 13)
+        // Island sizes based on type
+        let islandSize: number
+        if (sizeType === "tiny") {
+            islandSize = 15 + Math.floor(Math.random() * 20)  // 15-34 tiles (small)
+        } else {
+            islandSize = 200 + Math.floor(Math.random() * 401) // 200-600 tiles (large)
+        }
+
         const islandTiles: { x: number; y: number }[] = [center]
 
         // Clear the center water tile (will be filled by biome growth later)
@@ -381,8 +397,11 @@ export default class World {
                 for (const [dx, dy] of directions) {
                     const nx = tile.x + dx
                     const ny = tile.y + dy
+                    // Check if this tile is still water in the grid
                     if (
-                        waterTiles.some(w => w.x === nx && w.y === ny) &&
+                        nx >= 0 && nx < this.width &&
+                        ny >= 0 && ny < this.height &&
+                        grid[ny][nx]?.biome instanceof Water &&
                         !islandTiles.some(t => t.x === nx && t.y === ny)
                     ) {
                         candidates.push({ x: nx, y: ny })
@@ -520,26 +539,68 @@ export default class World {
     }
 
     findSpawnPoint(): { x: number; y: number } {
-        // Find a plains or beach tile near the center of the map
-        const centerX = Math.floor(this.width / 2)
-        const centerY = Math.floor(this.height / 2)
+        // Find the largest landmass (mainland) using flood fill
+        const visited: boolean[][] = Array.from({ length: this.height }, () =>
+            Array.from({ length: this.width }, () => false)
+        )
 
-        // Search in expanding squares from center
-        for (let radius = 0; radius < Math.max(this.width, this.height); radius++) {
-            for (let dy = -radius; dy <= radius; dy++) {
-                for (let dx = -radius; dx <= radius; dx++) {
-                    if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue
-                    const x = centerX + dx
-                    const y = centerY + dy
-                    const tile = this.getTile(x, y)
-                    if (tile && (tile.biome instanceof Plains || tile.biome instanceof Beach)) {
-                        return { x, y }
+        let largestLandmass: { x: number; y: number }[] = []
+        const directions = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                const tile = this.tiles[y][x]
+                if (visited[y][x] || tile.biome instanceof Water || tile.biome instanceof DeepWater) continue
+
+                // Flood fill to find this landmass
+                const landmass: { x: number; y: number }[] = []
+                const queue: { x: number; y: number }[] = [{ x, y }]
+                visited[y][x] = true
+
+                while (queue.length > 0) {
+                    const current = queue.shift()!
+                    landmass.push(current)
+
+                    for (const [dx, dy] of directions) {
+                        const nx = current.x + dx
+                        const ny = current.y + dy
+                        if (
+                            nx >= 0 && nx < this.width &&
+                            ny >= 0 && ny < this.height &&
+                            !visited[ny][nx]
+                        ) {
+                            const neighborTile = this.tiles[ny][nx]
+                            if (!(neighborTile.biome instanceof Water) && !(neighborTile.biome instanceof DeepWater)) {
+                                visited[ny][nx] = true
+                                queue.push({ x: nx, y: ny })
+                            }
+                        }
                     }
+                }
+
+                // Keep track of the largest landmass
+                if (landmass.length > largestLandmass.length) {
+                    largestLandmass = landmass
                 }
             }
         }
 
-        // Fallback to center
-        return { x: centerX, y: centerY }
+        // From the mainland, find plains or beach tiles for spawning
+        const candidates = largestLandmass.filter(({ x, y }) => {
+            const tile = this.tiles[y][x]
+            return tile.biome instanceof Plains || tile.biome instanceof Beach
+        })
+
+        if (candidates.length > 0) {
+            return candidates[Math.floor(Math.random() * candidates.length)]
+        }
+
+        // Fallback to any tile on the mainland
+        if (largestLandmass.length > 0) {
+            return largestLandmass[Math.floor(Math.random() * largestLandmass.length)]
+        }
+
+        // Final fallback to center
+        return { x: Math.floor(this.width / 2), y: Math.floor(this.height / 2) }
     }
 }
