@@ -3,7 +3,7 @@ import type World from "../classes/world";
 import DeepWater from "../classes/biomes/deepWater";
 
 const TILE_SIZE = 17;
-const MIN_ZOOM = 0.5;
+const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 6;
 
 const DEFAULT_SIZE = { width: 600, height: 600 };
@@ -224,8 +224,20 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, initialS
           const seen = isSeen(tilePos.x, tilePos.y);
           if (tile) {
             const rect = canvas.getBoundingClientRect();
+            let tooltipText = "???";
+            if (seen) {
+              const landmass = world.getLandmass(tilePos.x, tilePos.y);
+              const waterBody = world.getWaterBody(tilePos.x, tilePos.y);
+              if (landmass) {
+                tooltipText = `${tile.biome.name} - ${landmass.name}`;
+              } else if (waterBody) {
+                tooltipText = `${tile.biome.name} - ${waterBody.name}`;
+              } else {
+                tooltipText = tile.biome.name;
+              }
+            }
             setTooltip({
-              text: seen ? tile.biome.name : "???",
+              text: tooltipText,
               x: e.clientX - rect.left,
               y: e.clientY - rect.top,
             });

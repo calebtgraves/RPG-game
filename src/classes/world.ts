@@ -1,16 +1,19 @@
-import type { Tile, BiomeConstructor, BiomeEntry } from "../types";
+import type { Tile, BiomeConstructor, BiomeEntry, Landmass, WaterBody } from "../types";
 import Water from "./biomes/water";
 import DeepWater from "./biomes/deepWater";
 import Beach from "./biomes/beach";
 import Forest from "./biomes/forest";
 import MagicalLake from "./biomes/magicalLake";
 import Plains from "./biomes/plains";
+import { generateIslandName, generateMainlandName, generateLakeName } from "../utils/nameGenerator";
 
 export default class World {
   width: number;
   height: number;
   tiles: Tile[][];
   availableBiomes: BiomeEntry[];
+  landmasses: Landmass[] = [];
+  waterBodies: WaterBody[] = [];
 
   constructor({
     width,
@@ -110,6 +113,12 @@ export default class World {
 
     // Step 7: Convert fully surrounded water to deep water
     this.convertToDeepWater(grid as Tile[][]);
+
+    // Step 8: Identify and name all landmasses
+    this.identifyLandmasses(grid as Tile[][]);
+
+    // Step 9: Identify and name water bodies (lakes and bays)
+    this.identifyWaterBodies(grid as Tile[][]);
 
     return grid as Tile[][];
   }
@@ -278,8 +287,16 @@ export default class World {
     }
 
     // Place water outside the mainland zone
+    const edgeMargin = 4; // Always have water at least this far from edges
     for (let y = 0; y < this.height; y++) {
       for (let x = 0; x < this.width; x++) {
+        // Force water at edges
+        const distFromEdge = Math.min(x, y, this.width - 1 - x, this.height - 1 - y);
+        if (distFromEdge < edgeMargin) {
+          grid[y][x] = { biome: new Water(), x, y };
+          continue;
+        }
+
         // Distance from center (using max for square-ish shape)
         const distX = Math.abs(x - centerX);
         const distY = Math.abs(y - centerY);
@@ -415,16 +432,22 @@ export default class World {
     const minRequired = sizeType === "large" ? 250 : 20;
     if (availableWater.length < minRequired) return;
 
-    // Find inner tiles (not at the edge of the water area)
-    const margin = sizeType === "large" ? 8 : 3;
+    // Find inner tiles (not at the edge of the water area or map)
+    const margin = sizeType === "large" ? 5 : 2;
+    const edgeBuffer = sizeType === "large" ? 12 : 8; // Keep island centers away from edges
     const innerTiles = availableWater.filter((t) => {
+      // Don't spawn islands too close to map edges
+      if (t.x < edgeBuffer || t.x >= this.width - edgeBuffer ||
+          t.y < edgeBuffer || t.y >= this.height - edgeBuffer) {
+        return false;
+      }
       const nearbyWater = availableWater.filter(
         (w) => Math.abs(w.x - t.x) <= margin && Math.abs(w.y - t.y) <= margin,
       ).length;
-      return nearbyWater >= (margin * 2 + 1) * (margin * 2 + 1) * 0.5;
+      return nearbyWater >= (margin * 2 + 1) * (margin * 2 + 1) * 0.3;
     });
 
-    if (innerTiles.length < 4) return;
+    if (innerTiles.length < 1) return;
 
     // Pick a random center point for the island
     const center = innerTiles[Math.floor(Math.random() * innerTiles.length)];
@@ -434,7 +457,7 @@ export default class World {
     if (sizeType === "tiny") {
       islandSize = 15 + Math.floor(Math.random() * 20); // 15-34 tiles (small)
     } else {
-      islandSize = 200 + Math.floor(Math.random() * 401); // 200-600 tiles (large)
+      islandSize = 80 + Math.floor(Math.random() * 121); // 80-200 tiles (large)
     }
 
     const islandTiles: { x: number; y: number }[] = [center];
@@ -456,6 +479,7 @@ export default class World {
           const nx = tile.x + dx;
           const ny = tile.y + dy;
           // Check if this tile is still water in the grid
+          // Islands naturally stop at the forced water edge
           if (
             nx >= 0 &&
             nx < this.width &&
@@ -620,6 +644,311 @@ export default class World {
 
     if (neighbors.length === 0) return null;
     return neighbors[Math.floor(Math.random() * neighbors.length)];
+  }
+
+  private identifyLandmasses(grid: Tile[][]): void {
+    const visited: boolean[][] = Array.from({ length: this.height }, () =>
+      Array.from({ length: this.width }, () => false),
+    );
+
+    let landmassId = 0;
+    const rawLandmasses: { id: number; tiles: { x: number; y: number }[] }[] = [];
+    const directions = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ];
+
+    // Step 1: Identify all separate land areas
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const tile = grid[y][x];
+        if (
+          visited[y][x] ||
+          tile.biome instanceof Water ||
+          tile.biome instanceof DeepWater
+        ) {
+          continue;
+        }
+
+        // Flood fill to find this landmass
+        const tiles: { x: number; y: number }[] = [];
+        const queue: { x: number; y: number }[] = [{ x, y }];
+        visited[y][x] = true;
+
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          tiles.push(current);
+
+          for (const [dx, dy] of directions) {
+            const nx = current.x + dx;
+            const ny = current.y + dy;
+            if (
+              nx >= 0 &&
+              nx < this.width &&
+              ny >= 0 &&
+              ny < this.height &&
+              !visited[ny][nx]
+            ) {
+              const neighborTile = grid[ny][nx];
+              if (
+                !(neighborTile.biome instanceof Water) &&
+                !(neighborTile.biome instanceof DeepWater)
+              ) {
+                visited[ny][nx] = true;
+                queue.push({ x: nx, y: ny });
+              }
+            }
+          }
+        }
+
+        rawLandmasses.push({ id: landmassId, tiles });
+        landmassId++;
+      }
+    }
+
+    // Sort by size (largest first) to identify mainland
+    rawLandmasses.sort((a, b) => b.tiles.length - a.tiles.length);
+
+    // Step 2: Group nearby small islands (not the mainland)
+    // Islands within 2 tiles of water from each other get grouped
+    const GROUPING_DISTANCE = 2;
+    const mainland = rawLandmasses[0];
+    const islands = rawLandmasses.slice(1);
+
+    // Build a map of which group each island belongs to
+    const islandGroups: number[] = islands.map((_, i) => i); // Initially each island is its own group
+
+    // Check if two islands are close enough to merge
+    const areIslandsClose = (a: { tiles: { x: number; y: number }[] }, b: { tiles: { x: number; y: number }[] }): boolean => {
+      for (const tileA of a.tiles) {
+        for (const tileB of b.tiles) {
+          const dist = Math.abs(tileA.x - tileB.x) + Math.abs(tileA.y - tileB.y);
+          if (dist <= GROUPING_DISTANCE + 1) { // +1 because adjacent tiles have dist 1
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    // Union-find style grouping
+    const findGroup = (i: number): number => {
+      while (islandGroups[i] !== i) {
+        islandGroups[i] = islandGroups[islandGroups[i]]; // Path compression
+        i = islandGroups[i];
+      }
+      return i;
+    };
+
+    const unionGroups = (i: number, j: number): void => {
+      const gi = findGroup(i);
+      const gj = findGroup(j);
+      if (gi !== gj) {
+        islandGroups[gi] = gj;
+      }
+    };
+
+    // Compare all pairs of islands
+    for (let i = 0; i < islands.length; i++) {
+      for (let j = i + 1; j < islands.length; j++) {
+        if (areIslandsClose(islands[i], islands[j])) {
+          unionGroups(i, j);
+        }
+      }
+    }
+
+    // Step 3: Create final landmasses with merged groups
+    const usedNames = new Set<string>();
+    const landmasses: Landmass[] = [];
+    let finalId = 0;
+
+    // Add mainland first
+    if (mainland) {
+      const name = generateMainlandName(usedNames);
+      usedNames.add(name);
+
+      // Assign IDs to mainland tiles
+      for (const t of mainland.tiles) {
+        grid[t.y][t.x].landmassId = finalId;
+      }
+
+      landmasses.push({
+        id: finalId,
+        name,
+        tiles: mainland.tiles,
+        isMainland: true,
+      });
+      finalId++;
+    }
+
+    // Group islands by their final group ID
+    const groupedIslands: Map<number, { x: number; y: number }[]> = new Map();
+    for (let i = 0; i < islands.length; i++) {
+      const groupId = findGroup(i);
+      if (!groupedIslands.has(groupId)) {
+        groupedIslands.set(groupId, []);
+      }
+      groupedIslands.get(groupId)!.push(...islands[i].tiles);
+    }
+
+    // Create landmass entries for each group
+    for (const [, tiles] of groupedIslands) {
+      const name = generateIslandName(usedNames);
+      usedNames.add(name);
+
+      // Assign IDs to all tiles in this group
+      for (const t of tiles) {
+        grid[t.y][t.x].landmassId = finalId;
+      }
+
+      landmasses.push({
+        id: finalId,
+        name,
+        tiles,
+        isMainland: false,
+      });
+      finalId++;
+    }
+
+    this.landmasses = landmasses;
+  }
+
+  getLandmass(x: number, y: number): Landmass | null {
+    const tile = this.getTile(x, y);
+    if (!tile || tile.landmassId === undefined) return null;
+    return this.landmasses.find((l) => l.id === tile.landmassId) ?? null;
+  }
+
+  getWaterBody(x: number, y: number): WaterBody | null {
+    const tile = this.getTile(x, y);
+    if (!tile || tile.waterBodyId === undefined) return null;
+    return this.waterBodies.find((w) => w.id === tile.waterBodyId) ?? null;
+  }
+
+  private identifyWaterBodies(grid: Tile[][]): void {
+    const visited: boolean[][] = Array.from({ length: this.height }, () =>
+      Array.from({ length: this.width }, () => false),
+    );
+
+    const usedNames = new Set<string>();
+    let waterBodyId = 0;
+    const waterBodies: WaterBody[] = [];
+    const directions = [
+      [0, -1],
+      [0, 1],
+      [-1, 0],
+      [1, 0],
+    ];
+
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const tile = grid[y][x];
+        // Only process water tiles (Water, DeepWater, MagicalLake)
+        const isWaterTile =
+          tile.biome instanceof Water ||
+          tile.biome instanceof DeepWater ||
+          tile.biome instanceof MagicalLake;
+
+        if (visited[y][x] || !isWaterTile) {
+          continue;
+        }
+
+        // Flood fill to find this water body
+        const tiles: { x: number; y: number }[] = [];
+        const queue: { x: number; y: number }[] = [{ x, y }];
+        visited[y][x] = true;
+        let touchesEdge = false;
+        let hasMagicalLake = false;
+
+        while (queue.length > 0) {
+          const current = queue.shift()!;
+          tiles.push(current);
+
+          const currentTile = grid[current.y][current.x];
+          if (currentTile.biome instanceof MagicalLake) {
+            hasMagicalLake = true;
+          }
+
+          // Check if this tile touches the map edge
+          if (
+            current.x === 0 ||
+            current.x === this.width - 1 ||
+            current.y === 0 ||
+            current.y === this.height - 1
+          ) {
+            touchesEdge = true;
+          }
+
+          for (const [dx, dy] of directions) {
+            const nx = current.x + dx;
+            const ny = current.y + dy;
+            if (
+              nx >= 0 &&
+              nx < this.width &&
+              ny >= 0 &&
+              ny < this.height &&
+              !visited[ny][nx]
+            ) {
+              const neighborTile = grid[ny][nx];
+              const isNeighborWater =
+                neighborTile.biome instanceof Water ||
+                neighborTile.biome instanceof DeepWater ||
+                neighborTile.biome instanceof MagicalLake;
+
+              if (isNeighborWater) {
+                visited[ny][nx] = true;
+                queue.push({ x: nx, y: ny });
+              }
+            }
+          }
+        }
+
+        // Determine water body type
+        let type: 'lake' | 'bay' | 'ocean';
+
+        if (!touchesEdge) {
+          // Doesn't touch edge = lake (including magical lakes)
+          type = 'lake';
+        } else {
+          // Touches edge = ocean (we don't name the ocean)
+          type = 'ocean';
+        }
+
+        // Only create named water bodies for lakes
+        if (type === 'lake') {
+          // Assign IDs to tiles
+          for (const t of tiles) {
+            grid[t.y][t.x].waterBodyId = waterBodyId;
+          }
+
+          // Generate name
+          let name: string;
+          if (hasMagicalLake) {
+            // Special naming for magical lakes
+            name = "The " + ["Enchanted", "Mystical", "Arcane", "Ethereal", "Fey"][Math.floor(Math.random() * 5)] + " Waters";
+            if (usedNames.has(name)) {
+              name = generateLakeName(usedNames);
+            }
+          } else {
+            name = generateLakeName(usedNames);
+          }
+          usedNames.add(name);
+
+          waterBodies.push({
+            id: waterBodyId,
+            name,
+            tiles,
+            type,
+          });
+
+          waterBodyId++;
+        }
+      }
+    }
+
+    this.waterBodies = waterBodies;
   }
 
   getTile(x: number, y: number): Tile | null {

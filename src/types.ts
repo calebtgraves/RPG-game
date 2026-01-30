@@ -16,6 +16,22 @@ export type Tile = {
     biome: Biome
     x: number
     y: number
+    landmassId?: number
+    waterBodyId?: number
+}
+
+export type Landmass = {
+    id: number
+    name: string
+    tiles: { x: number; y: number }[]
+    isMainland: boolean
+}
+
+export type WaterBody = {
+    id: number
+    name: string
+    tiles: { x: number; y: number }[]
+    type: 'lake' | 'bay' | 'ocean'
 }
 
 export type BiomeConstructor = new () => Biome
