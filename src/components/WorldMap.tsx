@@ -6,20 +6,15 @@ const TILE_SIZE = 17;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 6;
 
-const DEFAULT_SIZE = { width: 600, height: 600 };
-const MIN_SIZE = 200;
-
 type Props = {
   world: World;
   playerPos: { x: number; y: number };
   seenTiles: Set<string>;
   onMove: (x: number, y: number) => void;
-  initialSize?: { width: number; height: number };
-  onResize?: (width: number, height: number) => void;
   devMode?: boolean;
 };
 
-export default function WorldMap({ world, playerPos, seenTiles, onMove, initialSize, onResize, devMode = false }: Props) {
+export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -27,11 +22,9 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, initialS
   // Initialize offset to center on player
   const [offset, setOffset] = useState(() => {
     const tileSize = TILE_SIZE; // zoom is 1 initially
-    const canvasW = initialSize?.width ?? DEFAULT_SIZE.width;
-    const canvasH = initialSize?.height ?? DEFAULT_SIZE.height;
     return {
-      x: canvasW / 2 - (playerPos.x + 0.5) * tileSize,
-      y: canvasH / 2 - (playerPos.y + 0.5) * tileSize,
+      x: 300 - (playerPos.x + 0.5) * tileSize,
+      y: 300 - (playerPos.y + 0.5) * tileSize,
     };
   });
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -39,8 +32,25 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, initialS
   const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number } | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [pinchStart, setPinchStart] = useState<{ dist: number; zoom: number; offset: { x: number; y: number }; center: { x: number; y: number } } | null>(null);
-  const [containerSize, setContainerSize] = useState(initialSize ?? DEFAULT_SIZE);
-  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 600, height: 600 });
+
+  // Use ResizeObserver to track container size changes from flex layout
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setContainerSize({ width, height });
+        }
+      }
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   const canvasWidth = containerSize.width;
   const canvasHeight = containerSize.height;
@@ -424,63 +434,10 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, initialS
     };
   }, [handleWheel, handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleTouchStart, handleTouchMove, handleTouchEnd]);
 
-  // Handle resize start
-  const handleResizeStart = useCallback(
-    (e: MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setResizeStart({
-        x: e.clientX,
-        y: e.clientY,
-        width: containerSize.width,
-        height: containerSize.height,
-      });
-    },
-    [containerSize]
-  );
-
-  // Handle resize move (attached to window)
-  useEffect(() => {
-    if (!resizeStart) return;
-
-    const handleResizeMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - resizeStart.x;
-      const deltaY = e.clientY - resizeStart.y;
-      const newWidth = Math.max(MIN_SIZE, resizeStart.width + deltaX);
-      const newHeight = Math.max(MIN_SIZE, resizeStart.height + deltaY);
-
-      // Adjust offset to keep the view centered on the same point
-      const offsetAdjustX = (newWidth - containerSize.width) / 2;
-      const offsetAdjustY = (newHeight - containerSize.height) / 2;
-
-      setContainerSize({ width: newWidth, height: newHeight });
-      setOffset(prev => ({ x: prev.x + offsetAdjustX, y: prev.y + offsetAdjustY }));
-    };
-
-    const handleResizeEnd = () => {
-      if (resizeStart) {
-        onResize?.(containerSize.width, containerSize.height);
-      }
-      setResizeStart(null);
-    };
-
-    window.addEventListener("mousemove", handleResizeMove);
-    window.addEventListener("mouseup", handleResizeEnd);
-
-    return () => {
-      window.removeEventListener("mousemove", handleResizeMove);
-      window.removeEventListener("mouseup", handleResizeEnd);
-    };
-  }, [resizeStart, onResize, containerSize]);
-
   return (
     <div
       ref={containerRef}
       class="world-map-container"
-      style={{
-        width: `${containerSize.width}px`,
-        height: `${containerSize.height}px`,
-      }}
     >
       <canvas
         ref={canvasRef}
@@ -503,10 +460,6 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, initialS
         <button onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z * 1.2))}>+</button>
         <button onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z / 1.2))}>-</button>
       </div>
-      <div
-        class="resize-handle"
-        onMouseDown={handleResizeStart}
-      />
     </div>
   );
 }
