@@ -11,10 +11,12 @@ type Props = {
   playerPos: { x: number; y: number };
   seenTiles: Set<string>;
   onMove: (x: number, y: number) => void;
+  onCancelMove: () => void;
+  pendingMoveSelection: boolean;
   devMode?: boolean;
 };
 
-export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode = false }: Props) {
+export default function WorldMap({ world, playerPos, seenTiles, onMove, onCancelMove, pendingMoveSelection, devMode = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -144,17 +146,17 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode 
       ctx.strokeRect(hoverScreenX, hoverScreenY, tileSize, tileSize);
     }
 
-    // Highlight adjacent tiles (yellow, but not if hovered)
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = playerPos.x + dx;
-        const ny = playerPos.y + dy;
-        if (isAdjacent(nx, ny)) {
-          const isHovered = hoveredTile && hoveredTile.x === nx && hoveredTile.y === ny;
-          if (!isHovered) {
+    // Highlight adjacent tiles (yellow) only when in move-selection mode
+    if (pendingMoveSelection) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = playerPos.x + dx;
+          const ny = playerPos.y + dy;
+          if (isAdjacent(nx, ny)) {
+            const isHovered = hoveredTile && hoveredTile.x === nx && hoveredTile.y === ny;
             const adjScreenX = offset.x + nx * tileSize;
             const adjScreenY = offset.y + ny * tileSize;
-            ctx.strokeStyle = "rgba(255, 204, 0, 0.6)";
+            ctx.strokeStyle = isHovered ? "rgba(255, 204, 0, 1)" : "rgba(255, 204, 0, 0.6)";
             ctx.lineWidth = 2;
             ctx.strokeRect(adjScreenX + 1, adjScreenY + 1, tileSize - 2, tileSize - 2);
           }
@@ -174,7 +176,7 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode 
     ctx.strokeStyle = "white";
     ctx.lineWidth = 2;
     ctx.stroke();
-  }, [world, playerPos, seenTiles, offset, zoom, hoveredTile, getTileSize, isSeen, isAdjacent, canvasWidth, canvasHeight]);
+  }, [world, playerPos, seenTiles, offset, zoom, hoveredTile, getTileSize, isSeen, isAdjacent, pendingMoveSelection, canvasWidth, canvasHeight]);
 
   // Handle wheel zoom
   const handleWheel = useCallback(
@@ -266,13 +268,17 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode 
       if (dragStart && !hasDragged) {
         // This was a click, not a drag
         const tilePos = screenToTile(e.clientX, e.clientY);
-        if (tilePos && isAdjacent(tilePos.x, tilePos.y)) {
-          onMove(tilePos.x, tilePos.y);
+        if (pendingMoveSelection) {
+          if (tilePos && isAdjacent(tilePos.x, tilePos.y)) {
+            onMove(tilePos.x, tilePos.y);
+          } else {
+            onCancelMove();
+          }
         }
       }
       setDragStart(null);
     },
-    [dragStart, hasDragged, screenToTile, isAdjacent, onMove]
+    [dragStart, hasDragged, screenToTile, isAdjacent, onMove, onCancelMove, pendingMoveSelection]
   );
 
   // Handle mouse leave
@@ -386,8 +392,12 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode 
           // This was a tap, not a drag
           const touch = e.changedTouches[0];
           const tilePos = screenToTile(touch.clientX, touch.clientY);
-          if (tilePos && isAdjacent(tilePos.x, tilePos.y)) {
-            onMove(tilePos.x, tilePos.y);
+          if (pendingMoveSelection) {
+            if (tilePos && isAdjacent(tilePos.x, tilePos.y)) {
+              onMove(tilePos.x, tilePos.y);
+            } else {
+              onCancelMove();
+            }
           }
         }
         setDragStart(null);
@@ -405,7 +415,7 @@ export default function WorldMap({ world, playerPos, seenTiles, onMove, devMode 
         setHasDragged(true); // Prevent tap after pinch
       }
     },
-    [dragStart, hasDragged, screenToTile, isAdjacent, onMove, offset]
+    [dragStart, hasDragged, screenToTile, isAdjacent, onMove, onCancelMove, pendingMoveSelection, offset]
   );
 
   // Set up event listeners

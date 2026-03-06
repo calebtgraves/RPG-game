@@ -1,12 +1,13 @@
 import type { SpawnEntry, Action } from "../../types"
 import ExploreAction from "../actions/exploreAction"
+import MoveAction from "../actions/moveAction"
 
 export default abstract class Biome {
     name: string
     description: string
     color: string
     nativeMobs: SpawnEntry[]
-    menuActions: Action[] = [ExploreAction]
+    menuActions: Action[] = [MoveAction, ExploreAction]
 
     constructor({ name, description, color, nativeMobs }: { name: string; description: string; color: string; nativeMobs: SpawnEntry[] }) {
         this.name = name
