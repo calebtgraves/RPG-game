@@ -48,6 +48,7 @@ export function App() {
   });
   const [nearbyMobs, setNearbyMobs] = useState<Mob[]>([]);
   const [actionHistory, setActionHistory] = useState<string[]>([]);
+  const [pendingMoveSelection, setPendingMoveSelection] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -96,6 +97,7 @@ export function App() {
 
   const handleMove = useCallback(
     (x: number, y: number) => {
+      setPendingMoveSelection(false);
       setPlayerPos({ x, y });
       setSeenTiles((prev) => {
         const next = new Set(prev);
@@ -142,6 +144,11 @@ export function App() {
       const result = action.execute(ctx, target);
       setActionHistory((prev) => [...prev, result.message]);
 
+      if (action.id === 'move') {
+        setPendingMoveSelection(true);
+        return;
+      }
+
       // Remove dead mobs from nearby
       setNearbyMobs((mobs) => mobs.filter((m) => m.stats.hitpoints > 0));
     },
@@ -155,6 +162,8 @@ export function App() {
         playerPos={playerPos}
         seenTiles={seenTiles}
         onMove={handleMove}
+        onCancelMove={() => setPendingMoveSelection(false)}
+        pendingMoveSelection={pendingMoveSelection}
         devMode={devMode}
       />
       <div
