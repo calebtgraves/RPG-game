@@ -190,3 +190,202 @@ html, body {
 .zoom-controls button:hover {
   background: white;
 }
+
+/* ── Main Menu ── */
+
+.main-menu {
+  width: 100vw;
+  height: 100vh;
+  background: #1a1a2e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.main-menu-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.game-title {
+  font-size: 72px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+  color: #c8a84b;
+}
+
+.game-subtitle {
+  font-size: 16px;
+  color: #888;
+  letter-spacing: 2px;
+}
+
+.menu-button {
+  padding: 14px 40px;
+  font-size: 16px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+  border: 1px solid;
+}
+
+.menu-button.primary {
+  background: #c8a84b;
+  border-color: #c8a84b;
+  color: #1a1a2e;
+  font-weight: bold;
+}
+
+.menu-button.primary:hover:not(:disabled) {
+  background: #d9bb62;
+  border-color: #d9bb62;
+}
+
+.menu-button.primary:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.menu-button.secondary {
+  background: transparent;
+  border-color: #555;
+  color: #aaa;
+}
+
+.menu-button.secondary:hover {
+  border-color: #888;
+  color: white;
+}
+
+/* ── Class Selection ── */
+
+.class-select-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 800px;
+  padding: 24px;
+}
+
+.class-select-title {
+  font-size: 28px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #c8a84b;
+}
+
+.class-cards {
+  display: flex;
+  gap: 20px;
+}
+
+.class-card {
+  background: #23233a;
+  border: 2px solid #333;
+  border-radius: 10px;
+  padding: 24px 20px;
+  width: 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: white;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.class-card:hover {
+  border-color: #666;
+  background: #2a2a44;
+}
+
+.class-card.selected {
+  border-color: #c8a84b;
+  background: #2a2a44;
+}
+
+.class-name {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.class-description {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.class-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.stat-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  width: 26px;
+}
+
+.stat-bar-track {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.stat-bar-pip {
+  height: 8px;
+  flex: 1;
+  border-radius: 2px;
+  background: #333;
+}
+
+.stat-bar-pip.filled {
+  background: #c8a84b;
+}
+
+.stat-value {
+  font-size: 12px;
+  color: #aaa;
+  width: 12px;
+  text-align: right;
+}
+
+.class-select-actions {
+  display: flex;
+  gap: 16px;
+}

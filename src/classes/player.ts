@@ -9,12 +9,12 @@ export default class Player {
     inventory: object[] = []
     actions: object[] = []
 
-    constructor(name: string) {
+    constructor(name: string, classStats?: { strength: number; speed: number; smarts: number }) {
         this.name = name
         this.stats = {
-            strength: 10,
-            speed: 10,
-            smarts: 10,
+            strength: classStats?.strength ?? 10,
+            speed: classStats?.speed ?? 10,
+            smarts: classStats?.smarts ?? 10,
             hitpoints: 20,
         }
     }

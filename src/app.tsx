@@ -5,9 +5,11 @@ import Mountains from "./classes/biomes/mountains";
 import Forest from "./classes/biomes/forest";
 import WorldMap from "./components/WorldMap";
 import ActionsPanel from "./components/ActionsPanel";
+import MainMenu from "./components/MainMenu";
 import Player from "./classes/player";
 import type Mob from "./classes/mobs/mob";
 import type { Action } from "./types";
+import type { PlayerClass } from "./playerClasses";
 import "./app.css";
 
 const devMode = new URLSearchParams(window.location.search).has("dev");
@@ -30,7 +32,13 @@ export function App() {
     [],
   );
 
-  const player = useMemo(() => new Player("Hero"), []);
+  const [gamePhase, setGamePhase] = useState<'menu' | 'game'>('menu');
+  const [selectedClass, setSelectedClass] = useState<PlayerClass | null>(null);
+
+  const player = useMemo(
+    () => new Player("Hero", selectedClass ?? undefined),
+    [selectedClass],
+  );
 
   const [playerPos, setPlayerPos] = useState(() => world.findSpawnPoint());
   const [seenTiles, setSeenTiles] = useState<Set<string>>(() => {
@@ -154,6 +162,12 @@ export function App() {
     },
     [player, currentTile, world, nearbyMobs],
   );
+
+  if (gamePhase === 'menu') {
+    return (
+      <MainMenu onStart={(cls) => { setSelectedClass(cls); setGamePhase('game'); }} />
+    );
+  }
 
   return (
     <div class={`game-container ${isResizing ? "resizing" : ""}`}>
